@@ -6,33 +6,45 @@
 namespace hzw
 {
 	/*
-	线程安全类
-	测试量级：千万
-	对比基准：::operator new
-	内存：少20%
-	速度：
-		单线程：快10%
-		多线程：多个线程请求相同大小速度不如operator new（请求内存大小相同的线程越多速度越慢）, 请求不同大小速度快10%
-	总结：请求内存越小，各线程请求内存大小各不相同，时空效率越优
+	内存池： 细粒度内存请求、各线程请求内存大小各不相同、 反复申请相同大小，时空效率越优
 	*/
 	class MemoryPool
 	{
+	public:
+		MemoryPool() = delete;
+
+		//功能：分配内存资源
+		//输入：内存需求的大小
+		//输出：分配后的内存指针
+		static void* allocate(size_t size)
+		{
+			return size > MaxSize ? ::operator new(size) : _allocate(alignSize(size));
+		}
+
+		//功能：释放内存资源
+		//输入：释放内存的指针，释放内存的大小
+		static void deallocate(void* oldP, size_t size)
+		{
+			size > MaxSize ? ::operator delete(oldP) : _deallocate(reinterpret_cast<Node*>(oldP), alignSize(size));
+		}
+
 	private:
-		enum {
-			ChainLength = 16, ChainPerSize = 8, Log2ChainPerSize = 3,
-			MaxSize = ChainLength * ChainPerSize, AskPerSize = 40, MaxSplitSize = 20
+		enum 
+		{
+			ChainLength = 16, ChainPerSize = 8, MaxSplitSize = 20,
+			MaxSize = ChainLength * ChainPerSize
 		};
-		//内存池链的个数  //内存池粒度 //log2ChainPerSize的指 //管理的最大内存 //每次申请内存个数 //最大切割个数
+		//内存池链的个数  //内存池粒度 //最大切割个数 //管理的最大内存 
 
 		struct Node
 		{
 			Node *next;
 		};
 		static std::mutex _mutexs[ChainLength];//内存池互斥量
-		static Node *volatile _pool[ChainLength];//内存池
+		static Node* _pool[ChainLength];//内存池
 		static std::mutex _freeMutex;//战备池互斥量
-		static char *volatile _freeBegin, *volatile _freeEnd;//战备池指针
-		static volatile size_t _count;//内存池管理内存总量
+		static char* _freeBegin, * _freeEnd;//战备池指针
+		static size_t _count;//内存池管理内存总量
 
 	private:
 		//功能：从内存池分配内存
@@ -52,26 +64,26 @@ namespace hzw
 		//功能：查找内存需求对应的内存链索引
 		//输入：内存需求大小
 		//输出：内存链索引
-		constexpr static size_t searchIndex(size_t size)
+		static size_t searchIndex(size_t size)
 		{
-			return (size + ChainPerSize - 1 >> Log2ChainPerSize) - 1;
+			return (size + ChainPerSize - 1 >> 3) - 1;
 		}
 
 		//功能：内存需求与ChainPerSize对齐
 		//输入：内存需求大小
 		//输出：对齐后内存需求大小
-		constexpr static size_t alignSize(size_t size)
+		static size_t alignSize(size_t size)
 		{
 			return (size + ChainPerSize - 1 & ~(ChainPerSize - 1));
 		}
 
 		//功能：向对应内存链添加新块
 		//输入：新块指针，内存需求大小
-		static void addToChain(Node *p, size_t size)
+		static void addToChain(Node* p, size_t size)
 		{
 			size_t index{ searchIndex(size) };
 			_mutexs[index].lock();
-			Node *volatile &chainHead{ _pool[index] };
+			Node*& chainHead{ _pool[index] };
 			p->next = chainHead;
 			chainHead = p;
 			_mutexs[index].unlock();
@@ -80,42 +92,24 @@ namespace hzw
 		//功能：移除对应内存链头部的块
 		//输入：对应内存链指针引用
 		//输出：移除的块指针
-		static void *removeFromChain(Node * volatile&chainHead)
+		static void *removeFromChain(Node*& chainHead)
 		{
-			void *result{ chainHead };
+			void* result{ chainHead };
 			chainHead = chainHead->next;
 			return result;
 		}
 
 		//功能：归还内存池内存
 		//输入：归还内存的指针，对齐后内存需求大小
-		static void _deallocate(Node *oldP, size_t size)
+		static void _deallocate(Node* oldP, size_t size)
 		{
 			addToChain(oldP, size);
-		}
-
-	public:
-		MemoryPool() = delete;
-
-		//功能：分配内存资源
-		//输入：内存需求的大小
-		//输出：分配后的内存指针
-		static void *allocate(size_t size)
-		{
-			return size > MaxSize ? ::operator new(size) : _allocate(alignSize(size));
-		}
-
-		//功能：释放内存资源
-		//输入：释放内存的指针，释放内存的大小
-		static void deallocate(void *oldP, size_t size)
-		{
-			size > MaxSize ? ::operator delete(oldP) : _deallocate(reinterpret_cast<Node *>(oldP), alignSize(size));
 		}
 	};
 
 	/*
-	类使用MemoryPool直接继承此类
-	用基类指针delete谨慎使用，size值不正确，内存回收异常
+	自定义类使用MemoryPool直接继承此类
+	用基类指针delete派生类，可能导致内存块无法正确回收到对应内存链，造成内存碎片
 	*/
 	class UseMemoryPool
 	{
