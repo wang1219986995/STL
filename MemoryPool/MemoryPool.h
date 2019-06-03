@@ -1,32 +1,26 @@
-ï»¿#ifndef MEMORYPOOL_H
+#ifndef MEMORYPOOL_H
 #define MEMORYPOOL_H
-#include <exception>
+
 #include <mutex>
 
 namespace hzw
 {
 	/*
-	å†…å­˜æ± ï¼š ç»†ç²’åº¦å†…å­˜è¯·æ±‚ã€å„çº¿ç¨‹è¯·æ±‚å†…å­˜å¤§å°å„ä¸ç›¸åŒã€ åå¤ç”³è¯·ç›¸åŒå¤§å°ï¼Œæ—¶ç©ºæ•ˆç‡è¶Šä¼˜
+	ÄÚ´æ³Ø£º Ï¸Á£¶ÈÄÚ´æÇëÇó¡¢¸÷Ïß³ÌÇëÇóÄÚ´æ´óĞ¡¸÷²»ÏàÍ¬¡¢ ·´¸´ÉêÇëÏàÍ¬´óĞ¡£¬Ê±¿ÕĞ§ÂÊÔ½ÓÅ
 	*/
 	class MemoryPool
 	{
 	public:
 		MemoryPool() = delete;
 
-		//åŠŸèƒ½ï¼šåˆ†é…å†…å­˜èµ„æº
-		//è¾“å…¥ï¼šå†…å­˜éœ€æ±‚çš„å¤§å°
-		//è¾“å‡ºï¼šåˆ†é…åçš„å†…å­˜æŒ‡é’ˆ
-		static void* allocate(size_t size)
-		{
-			return size > MaxSize ? ::operator new(size) : _allocate(alignSize(size));
-		}
+		//¹¦ÄÜ£º·ÖÅäÄÚ´æ×ÊÔ´
+		//ÊäÈë£ºÄÚ´æĞèÇóµÄ´óĞ¡
+		//Êä³ö£º·ÖÅäºóµÄÄÚ´æÖ¸Õë
+		static void* allocate(size_t size);
 
-		//åŠŸèƒ½ï¼šé‡Šæ”¾å†…å­˜èµ„æº
-		//è¾“å…¥ï¼šé‡Šæ”¾å†…å­˜çš„æŒ‡é’ˆï¼Œé‡Šæ”¾å†…å­˜çš„å¤§å°
-		static void deallocate(void* oldP, size_t size)
-		{
-			size > MaxSize ? ::operator delete(oldP) : _deallocate(reinterpret_cast<Node*>(oldP), alignSize(size));
-		}
+		//¹¦ÄÜ£ºÊÍ·ÅÄÚ´æ×ÊÔ´
+		//ÊäÈë£ºÊÍ·ÅÄÚ´æµÄÖ¸Õë£¬ÊÍ·ÅÄÚ´æµÄ´óĞ¡
+		static void deallocate(void* oldP, size_t size);
 
 	private:
 		enum 
@@ -34,82 +28,60 @@ namespace hzw
 			ChainLength = 16, ChainPerSize = 8, MaxSplitSize = 20,
 			MaxSize = ChainLength * ChainPerSize
 		};
-		//å†…å­˜æ± é“¾çš„ä¸ªæ•°  //å†…å­˜æ± ç²’åº¦ //æœ€å¤§åˆ‡å‰²ä¸ªæ•° //ç®¡ç†çš„æœ€å¤§å†…å­˜ 
+		//ÄÚ´æ³ØÁ´µÄ¸öÊı  //ÄÚ´æ³ØÁ£¶È //×î´óÇĞ¸î¸öÊı //¹ÜÀíµÄ×î´óÄÚ´æ 
 
 		struct Node
 		{
 			Node *next;
 		};
-		static std::mutex _mutexs[ChainLength];//å†…å­˜æ± äº’æ–¥é‡
-		static Node* _pool[ChainLength];//å†…å­˜æ± 
-		static std::mutex _freeMutex;//æˆ˜å¤‡æ± äº’æ–¥é‡
-		static char* _freeBegin, * _freeEnd;//æˆ˜å¤‡æ± æŒ‡é’ˆ
-		static size_t _count;//å†…å­˜æ± ç®¡ç†å†…å­˜æ€»é‡
+		static std::mutex _mutexs[ChainLength];//ÄÚ´æ³Ø»¥³âÁ¿
+		static Node* _pool[ChainLength];//ÄÚ´æ³Ø
+		static std::mutex _freeMutex;//Õ½±¸³Ø»¥³âÁ¿
+		static char* _freeBegin, * _freeEnd;//Õ½±¸³ØÖ¸Õë
+		static size_t _count;//ÄÚ´æ³Ø¹ÜÀíÄÚ´æ×ÜÁ¿
 
 	private:
-		//åŠŸèƒ½ï¼šä»å†…å­˜æ± åˆ†é…å†…å­˜
-		//è¾“å…¥ï¼šå¯¹é½åå†…å­˜éœ€æ±‚å¤§å°
-		//è¾“å‡ºï¼šåˆ†é…å†…å­˜å—çš„æŒ‡é’ˆ
+		//¹¦ÄÜ£º´ÓÄÚ´æ³Ø·ÖÅäÄÚ´æ
+		//ÊäÈë£º¶ÔÆëºóÄÚ´æĞèÇó´óĞ¡
+		//Êä³ö£º·ÖÅäÄÚ´æ¿éµÄÖ¸Õë
 		static void *_allocate(size_t size);
 
-		//åŠŸèƒ½ï¼šåˆ‡å‰²æˆ˜å¤‡æ± åè°ƒæ•´æˆ˜å¤‡æ± å¤§å°
-		//è¾“å…¥ï¼šå¯¹é½åå†…å­˜éœ€æ±‚å¤§å°
-		//è¾“å‡ºï¼šåˆ‡å‰²å®Œæˆåçš„å†…å­˜é“¾
+		//¹¦ÄÜ£ºÇĞ¸îÕ½±¸³Øºóµ÷ÕûÕ½±¸³Ø´óĞ¡
+		//ÊäÈë£º¶ÔÆëºóÄÚ´æĞèÇó´óĞ¡
+		//Êä³ö£ºÇĞ¸îÍê³ÉºóµÄÄÚ´æÁ´
 		static Node *splitFreePool(size_t size);
 
-		//åŠŸèƒ½ï¼šå¡«å……å†…å­˜é“¾ï¼ˆå¡«å……å†…å­˜æ¥æºï¼šæˆ˜å¤‡æ± ï¼Œmallocï¼Œæ›´å¤§çš„å†…å­˜é“¾ï¼‰
-		//è¾“å…¥ï¼šå¯¹é½åå†…å­˜éœ€æ±‚å¤§å°
+		//¹¦ÄÜ£ºÌî³äÄÚ´æÁ´£¨Ìî³äÄÚ´æÀ´Ô´£ºÕ½±¸³Ø£¬malloc£¬¸ü´óµÄÄÚ´æÁ´£©
+		//ÊäÈë£º¶ÔÆëºóÄÚ´æĞèÇó´óĞ¡
 		static void fillChain(size_t size);
 
-		//åŠŸèƒ½ï¼šæŸ¥æ‰¾å†…å­˜éœ€æ±‚å¯¹åº”çš„å†…å­˜é“¾ç´¢å¼•
-		//è¾“å…¥ï¼šå†…å­˜éœ€æ±‚å¤§å°
-		//è¾“å‡ºï¼šå†…å­˜é“¾ç´¢å¼•
-		static size_t searchIndex(size_t size)
-		{
-			return (size + ChainPerSize - 1 >> 3) - 1;
-		}
+		//¹¦ÄÜ£º²éÕÒÄÚ´æĞèÇó¶ÔÓ¦µÄÄÚ´æÁ´Ë÷Òı
+		//ÊäÈë£ºÄÚ´æĞèÇó´óĞ¡
+		//Êä³ö£ºÄÚ´æÁ´Ë÷Òı
+		static size_t searchIndex(size_t size);
 
-		//åŠŸèƒ½ï¼šå†…å­˜éœ€æ±‚ä¸ChainPerSizeå¯¹é½
-		//è¾“å…¥ï¼šå†…å­˜éœ€æ±‚å¤§å°
-		//è¾“å‡ºï¼šå¯¹é½åå†…å­˜éœ€æ±‚å¤§å°
-		static size_t alignSize(size_t size)
-		{
-			return (size + ChainPerSize - 1 & ~(ChainPerSize - 1));
-		}
+		//¹¦ÄÜ£ºÄÚ´æĞèÇóÓëChainPerSize¶ÔÆë
+		//ÊäÈë£ºÄÚ´æĞèÇó´óĞ¡
+		//Êä³ö£º¶ÔÆëºóÄÚ´æĞèÇó´óĞ¡
+		static size_t alignSize(size_t size);
 
-		//åŠŸèƒ½ï¼šå‘å¯¹åº”å†…å­˜é“¾æ·»åŠ æ–°å—
-		//è¾“å…¥ï¼šæ–°å—æŒ‡é’ˆï¼Œå†…å­˜éœ€æ±‚å¤§å°
-		static void addToChain(Node* p, size_t size)
-		{
-			size_t index{ searchIndex(size) };
-			_mutexs[index].lock();
-			Node*& chainHead{ _pool[index] };
-			p->next = chainHead;
-			chainHead = p;
-			_mutexs[index].unlock();
-		}
+		//¹¦ÄÜ£ºÏò¶ÔÓ¦ÄÚ´æÁ´Ìí¼ÓĞÂ¿é
+		//ÊäÈë£ºĞÂ¿éÖ¸Õë£¬ÄÚ´æĞèÇó´óĞ¡
+		static void addToChain(Node* p, size_t size);
 
-		//åŠŸèƒ½ï¼šç§»é™¤å¯¹åº”å†…å­˜é“¾å¤´éƒ¨çš„å—
-		//è¾“å…¥ï¼šå¯¹åº”å†…å­˜é“¾æŒ‡é’ˆå¼•ç”¨
-		//è¾“å‡ºï¼šç§»é™¤çš„å—æŒ‡é’ˆ
-		static void *removeFromChain(Node*& chainHead)
-		{
-			void* result{ chainHead };
-			chainHead = chainHead->next;
-			return result;
-		}
+		//¹¦ÄÜ£ºÒÆ³ı¶ÔÓ¦ÄÚ´æÁ´Í·²¿µÄ¿é
+		//ÊäÈë£º¶ÔÓ¦ÄÚ´æÁ´Ö¸ÕëÒıÓÃ
+		//Êä³ö£ºÒÆ³ıµÄ¿éÖ¸Õë
+		static void* removeFromChain(Node*& chainHead);
 
-		//åŠŸèƒ½ï¼šå½’è¿˜å†…å­˜æ± å†…å­˜
-		//è¾“å…¥ï¼šå½’è¿˜å†…å­˜çš„æŒ‡é’ˆï¼Œå¯¹é½åå†…å­˜éœ€æ±‚å¤§å°
-		static void _deallocate(Node* oldP, size_t size)
-		{
-			addToChain(oldP, size);
-		}
+		//¹¦ÄÜ£º¹é»¹ÄÚ´æ³ØÄÚ´æ
+		//ÊäÈë£º¹é»¹ÄÚ´æµÄÖ¸Õë£¬¶ÔÆëºóÄÚ´æĞèÇó´óĞ¡
+		static void _deallocate(Node* oldP, size_t size);
 	};
 
 	/*
-	è‡ªå®šä¹‰ç±»ä½¿ç”¨MemoryPoolç›´æ¥ç»§æ‰¿æ­¤ç±»
-	ç”¨åŸºç±»æŒ‡é’ˆdeleteæ´¾ç”Ÿç±»ï¼Œå¯èƒ½å¯¼è‡´å†…å­˜å—æ— æ³•æ­£ç¡®å›æ”¶åˆ°å¯¹åº”å†…å­˜é“¾ï¼Œé€ æˆå†…å­˜ç¢ç‰‡
+	×Ô¶¨ÒåÀàÊ¹ÓÃMemoryPoolÖ±½Ó¼Ì³Ğ´ËÀà
+	ÓÃ»ùÀàÖ¸ÕëdeleteÅÉÉúÀà£¬¿ÉÄÜµ¼ÖÂÄÚ´æ¿éÎŞ·¨ÕıÈ·»ØÊÕµ½¶ÔÓ¦ÄÚ´æÁ´£¬Ôì³ÉÄÚ´æËéÆ¬
 	*/
 	class UseMemoryPool
 	{
@@ -126,7 +98,7 @@ namespace hzw
 	};
 
 	/*
-	å®¹å™¨åˆ†é…å™¨å†…éƒ¨ä¸ºMemoryPool
+	ÈİÆ÷·ÖÅäÆ÷ÄÚ²¿ÎªMemoryPool
 	*/
 	template<typename T>
 	class Allocator

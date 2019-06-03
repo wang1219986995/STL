@@ -1,25 +1,26 @@
-ï»¿#include "MemoryPool.h"
+#include "MemoryPool.h"
+#include <exception>
 
 namespace hzw
 {
 	std::mutex MemoryPool::_mutexs[MemoryPool::ChainLength];
 	MemoryPool::Node* MemoryPool::_pool[MemoryPool::ChainLength]{ nullptr };
 	std::mutex MemoryPool::_freeMutex;
-	char * MemoryPool::_freeBegin = nullptr;
-	char * MemoryPool::_freeEnd = nullptr;
-	size_t MemoryPool::_count = 0;
+	char* MemoryPool::_freeBegin{ nullptr };
+	char* MemoryPool::_freeEnd{ nullptr };
+	size_t MemoryPool::_count{ 0 };
 
 	MemoryPool::Node * MemoryPool::splitFreePool(size_t size)
 	{
 		Node* result{ reinterpret_cast<Node*>(_freeBegin) };
 		size_t splitSize{ (_freeEnd - _freeBegin) / size };
 		splitSize = splitSize < MaxSplitSize ? splitSize : MaxSplitSize;
-		//åˆ‡å‰²
+		//ÇĞ¸î
 		char* p{ _freeBegin };
 		for (size_t i{ 1 }; i < splitSize; ++i, p += size)
 			reinterpret_cast<Node*>(p)->next = reinterpret_cast<Node*>(p + size);
 		reinterpret_cast<Node*>(p)->next = nullptr;
-		//é‡ç½®æˆ˜å¤‡æ± 
+		//ÖØÖÃÕ½±¸³Ø
 		_freeBegin = p + size;
 		return result;
 	}
@@ -27,19 +28,19 @@ namespace hzw
 	void MemoryPool::fillChain(size_t size)
 	{
 		size_t lastSize{ static_cast<size_t>(_freeEnd - _freeBegin) };
-		//ç”Ÿæˆæ–°é“¾
-		if (lastSize < size)//æˆ˜å¤‡æ± æ— æ³•æ»¡è¶³ä¸€ä¸ªéœ€æ±‚
+		//Éú³ÉĞÂÁ´
+		if (lastSize < size)//Õ½±¸³ØÎŞ·¨Âú×ãÒ»¸öĞèÇó
 		{
-			if (lastSize)		addToChain(reinterpret_cast<Node*>(_freeBegin), lastSize);//å¤„ç†æˆ˜å¤‡æ± å‰©ä½™
-			//å¡«å……æˆ˜å¤‡æ± 
-			size_t askSize{ size * MaxSplitSize * 2 + alignSize(_count >> 2) };//å¢é•¿é‡		
-			//è¿™é‡Œå¯ä»¥å‡å°‘askSizeç›´åˆ°å‘ç³»ç»Ÿç´¢æ±‚æˆåŠŸï¼Œä½†æ˜¯æ¶¸æ³½è€Œæ¸”æ˜æ™ºå—ï¼Ÿé€šå¸¸æƒ…å†µä¸æ˜æ™ºï¼Œæ‰€æœ‰ä¸‹æ–¹æ²¡é‚£ä¹ˆåš
-			if (_freeBegin = reinterpret_cast<char*>(std::malloc(askSize)))//å‘ç³»ç»Ÿç”³è¯·å†…å­˜æˆåŠŸ
+			if (lastSize)		addToChain(reinterpret_cast<Node*>(_freeBegin), lastSize);//´¦ÀíÕ½±¸³ØÊ£Óà
+			//Ìî³äÕ½±¸³Ø
+			size_t askSize{ size * MaxSplitSize * 2 + alignSize(_count >> 2) };//Ôö³¤Á¿		
+			//ÕâÀï¿ÉÒÔ¼õÉÙaskSizeÖ±µ½ÏòÏµÍ³Ë÷Çó³É¹¦£¬µ«ÊÇºÔÔó¶øÓæÃ÷ÖÇÂğ£¿Í¨³£Çé¿ö²»Ã÷ÖÇ£¬ËùÓĞÏÂ·½Ã»ÄÇÃ´×ö
+			if (_freeBegin = reinterpret_cast<char*>(std::malloc(askSize)))//ÏòÏµÍ³ÉêÇëÄÚ´æ³É¹¦
 			{
 				_freeEnd = _freeBegin + askSize;
 				_count += askSize;
 			}
-			else//å‘ç³»ç»Ÿå¤±è´¥ï¼Œåˆ†å‰²æ›´å¤§çš„å†…å­˜é“¾
+			else//ÏòÏµÍ³Ê§°Ü£¬·Ö¸î¸ü´óµÄÄÚ´æÁ´
 			{
 				size_t targetIndex{ searchIndex(size) + 1 };
 				for (; targetIndex < ChainLength; ++targetIndex)
@@ -48,7 +49,7 @@ namespace hzw
 					if (_pool[targetIndex])	break;
 					_mutexs[targetIndex].unlock();
 				}
-				if (targetIndex >= ChainLength)  throw std::bad_alloc{};//æ‰¾ä¸åˆ°å¯åˆ†å‰²çš„å¤§å†…å­˜é“¾
+				if (targetIndex >= ChainLength)  throw std::bad_alloc{};//ÕÒ²»µ½¿É·Ö¸îµÄ´óÄÚ´æÁ´
 				else
 				{
 					_freeBegin = reinterpret_cast<char *>(removeFromChain(_pool[targetIndex]));
@@ -57,20 +58,62 @@ namespace hzw
 				}
 			}
 		}
-		_pool[searchIndex(size)] = splitFreePool(size);//åˆ‡å‰²æˆ˜å¤‡æ± ï¼ŒæŒ‚åˆ°å¯¹åº”å†…å­˜é“¾
+		_pool[searchIndex(size)] = splitFreePool(size);//ÇĞ¸îÕ½±¸³Ø£¬¹Òµ½¶ÔÓ¦ÄÚ´æÁ´
+	}
+
+	inline size_t MemoryPool::searchIndex(size_t size)
+	{
+		return (size + ChainPerSize - 1 >> 3) - 1;
+	}
+
+	inline size_t MemoryPool::alignSize(size_t size)
+	{
+		return (size + ChainPerSize - 1 & ~(ChainPerSize - 1));
+	}
+
+	inline void MemoryPool::addToChain(Node* p, size_t size)
+	{
+		size_t index{ searchIndex(size) };
+		_mutexs[index].lock();
+		Node*& chainHead{ _pool[index] };
+		p->next = chainHead;
+		chainHead = p;
+		_mutexs[index].unlock();
+	}
+
+	inline void* MemoryPool::removeFromChain(Node*& chainHead)
+	{
+		void* result{ chainHead };
+		chainHead = chainHead->next;
+		return result;
+	}
+
+	inline void MemoryPool::_deallocate(Node* oldP, size_t size)
+	{
+		addToChain(oldP, size);
+	}
+
+	void* MemoryPool::allocate(size_t size)
+	{
+		return size > MaxSize ? ::operator new(size) : _allocate(alignSize(size));
+	}
+
+	void MemoryPool::deallocate(void* oldP, size_t size)
+	{
+		size > MaxSize ? ::operator delete(oldP) : _deallocate(reinterpret_cast<Node*>(oldP), alignSize(size));
 	}
 
 	void * MemoryPool::_allocate(size_t size)
 	{
 		size_t index{ searchIndex(size) };
 		std::lock_guard<std::mutex> poolMutex{ _mutexs[index] };
-		if (!_pool[index])//å¯¹åº”å†…å­˜é“¾ä¸ºç©ºåˆ™å¡«å……
+		if (!_pool[index])//¶ÔÓ¦ÄÚ´æÁ´Îª¿ÕÔòÌî³ä
 		{
-			if (!_freeMutex.try_lock())//æˆ˜å¤‡æ± ä¸Šé”å¤±è´¥åˆ™æ”¾å¼ƒå¯¹åº”å†…å­˜é“¾é”
+			if (!_freeMutex.try_lock())//Õ½±¸³ØÉÏËøÊ§°ÜÔò·ÅÆú¶ÔÓ¦ÄÚ´æÁ´Ëø
 			{
-				_mutexs[index].unlock();//æ­¤æ“ä½œå¯èƒ½å¯¼è‡´å¤šä¸ªçº¿ç¨‹è¿›å…¥åŒæ­¥å—ï¼Œä¸‹å‘ä½¿ç”¨åŒé‡æ£€æµ‹è§£å†³
+				_mutexs[index].unlock();//´Ë²Ù×÷¿ÉÄÜµ¼ÖÂ¶à¸öÏß³Ì½øÈëÍ¬²½¿é£¬ÏÂ·¢Ê¹ÓÃË«ÖØ¼ì²â½â¾ö
 				std::lock(_freeMutex, _mutexs[index]);
-				if (_pool[index])		goto unFill;//åŒé‡æ£€æµ‹
+				if (_pool[index])		goto unFill;//Ë«ÖØ¼ì²â
 			}
 			fillChain(size);
 		unFill:
