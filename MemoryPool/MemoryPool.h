@@ -1,106 +1,99 @@
 #ifndef MEMORYPOOL_H
 #define MEMORYPOOL_H
 
+#include "WukongMemoryPool.h"
+#include "LokiMemoryPool.h"
+#include <queue>
 #include <mutex>
 
 namespace hzw
 {
-	/*
-	内存池： 细粒度内存请求、各线程请求内存大小各不相同、 反复申请相同大小，时空效率越优
-	*/
-	class MemoryPool
+	//内存池管理：提供全局内存池分配和回收功能
+	template<typename MemoryPool>
+	class MemoryPoolManage
 	{
+		friend class MemoryPoolProxy;
+
 	public:
-		MemoryPool() = delete;
+		MemoryPoolManage() = delete;
+		MemoryPoolManage(const MemoryPoolManage&) = delete;
 
 		//功能：分配内存资源
 		//输入：内存需求的大小
 		//输出：分配后的内存指针
-		static void* allocate(size_t size);
+		static void* allocate(size_t size)
+		{
+			return _memoryPoolProxy.allocate(size);
+		}
 
 		//功能：释放内存资源
 		//输入：释放内存的指针，释放内存的大小
-		static void deallocate(void* oldP, size_t size);
-
-	private:
-		enum 
+		static void deallocate(void* p, size_t size)
 		{
-			ChainLength = 16, ChainPerSize = 8, MaxSplitSize = 20,
-			MaxSize = ChainLength * ChainPerSize
-		};
-		//内存池链的个数  //内存池粒度 //最大切割个数 //管理的最大内存 
-
-		struct Node
-		{
-			Node *next;
-		};
-		static std::mutex _mutexs[ChainLength];//内存池互斥量
-		static Node* _pool[ChainLength];//内存池
-		static std::mutex _freeMutex;//战备池互斥量
-		static char* _freeBegin, * _freeEnd;//战备池指针
-		static size_t _count;//内存池管理内存总量
-
-	private:
-		//功能：从内存池分配内存
-		//输入：对齐后内存需求大小
-		//输出：分配内存块的指针
-		static void *_allocate(size_t size);
-
-		//功能：切割战备池后调整战备池大小
-		//输入：对齐后内存需求大小
-		//输出：切割完成后的内存链
-		static Node *splitFreePool(size_t size);
-
-		//功能：填充内存链（填充内存来源：战备池，malloc，更大的内存链）
-		//输入：对齐后内存需求大小
-		static void fillChain(size_t size);
-
-		//功能：查找内存需求对应的内存链索引
-		//输入：内存需求大小
-		//输出：内存链索引
-		static size_t searchIndex(size_t size);
-
-		//功能：内存需求与ChainPerSize对齐
-		//输入：内存需求大小
-		//输出：对齐后内存需求大小
-		static size_t alignSize(size_t size);
-
-		//功能：向对应内存链添加新块
-		//输入：新块指针，内存需求大小
-		static void addToChain(Node* p, size_t size);
-
-		//功能：移除对应内存链头部的块
-		//输入：对应内存链指针引用
-		//输出：移除的块指针
-		static void* removeFromChain(Node*& chainHead);
-
-		//功能：归还内存池内存
-		//输入：归还内存的指针，对齐后内存需求大小
-		static void _deallocate(Node* oldP, size_t size);
-	};
-
-	/*
-	自定义类使用MemoryPool直接继承此类
-	用基类指针delete派生类，可能导致内存块无法正确回收到对应内存链，造成内存碎片
-	*/
-	class UseMemoryPool
-	{
-	public:
-		void *operator new(size_t size)
-		{
-			return MemoryPool::allocate(size);
+			return _memoryPoolProxy.deallocate(p, size);
 		}
 
-		void operator delete(void *oldP, size_t size)
+	private:
+		//内存池代理：提供内存池分配和回收功能
+		class MemoryPoolProxy
 		{
-			MemoryPool::deallocate(oldP, size);
-		}
-	};
+		public:
+			MemoryPoolProxy(const MemoryPoolProxy&) = delete;
 
-	/*
-	容器分配器内部为MemoryPool
-	*/
-	template<typename T>
+			MemoryPoolProxy() : _memoryPool{ini_pool()}
+			{
+				
+			}
+
+			~MemoryPoolProxy()
+			{
+				std::lock_guard<std::mutex> locker{ _poolsMutex };
+				_pools.push(std::move(_memoryPool));
+			}
+
+			void* allocate(size_t size)
+			{
+				return size > MemoryPool::MAX_SIZE ? ::operator new(size) :
+					_memoryPool.allocate(size);
+			}
+
+			void deallocate(void* p, size_t size)
+			{
+				size > MemoryPool::MAX_SIZE ? ::operator delete(p) :
+					_memoryPool.deallocate(p, size);
+			}
+
+		private:
+			MemoryPool ini_pool()
+			{
+				std::lock_guard<std::mutex> locker{ _poolsMutex };
+				if (_pools.empty()) return MemoryPool{};
+				else
+				{
+					MemoryPool pool{ std::move(_pools.front()) };
+					_pools.pop();
+					return pool;
+				}
+			}
+
+		private:
+			MemoryPool _memoryPool;
+		};
+	
+	private:	
+		static std::queue<MemoryPool> _pools;//内存池容器
+		static std::mutex _poolsMutex;//内存池容器锁
+		static thread_local MemoryPoolProxy _memoryPoolProxy;//各线程独立的内存池代理
+	};
+	template<typename MemoryPool>
+	std::queue<MemoryPool> MemoryPoolManage<MemoryPool>::_pools;
+	template<typename MemoryPool>
+	std::mutex MemoryPoolManage<MemoryPool>::_poolsMutex;
+	template<typename MemoryPool>
+	thread_local typename MemoryPoolManage<MemoryPool>::MemoryPoolProxy MemoryPoolManage<MemoryPool>::_memoryPoolProxy;
+
+	//分配器：提供容器使用内存池功能
+	template<typename T, typename MemoryPool>
 	class Allocator
 	{
 	public:
@@ -114,31 +107,48 @@ namespace hzw
 
 		value_type *allocate(std::size_t num)
 		{
-			return reinterpret_cast<value_type *>(MemoryPool::allocate(num * sizeof(value_type)));
+			return static_cast<value_type *>(MemoryPoolManage<MemoryPool>::allocate(num * sizeof(value_type)));
 		}
 
 		void deallocate(value_type *p, std::size_t num)
 		{
-			MemoryPool::deallocate(p, num * sizeof(value_type));
+			MemoryPoolManage<MemoryPool>::deallocate(p, num * sizeof(value_type));
 		}
 
 		template<typename U>
-		bool operator ==(const Allocator<U>& lh)
+		bool operator ==(const Allocator<U, MemoryPool>& lh)
 		{
 			return true;
 		}
 
 		template<typename U>
-		bool operator !=(const Allocator<U>& lh)
+		bool operator !=(const Allocator<U, MemoryPool>& lh)
 		{
 			return false;
 		}
 
 		template<typename U>
-		operator Allocator<U>()const
+		operator Allocator<U, MemoryPool>()const
 		{
-			return Allocator<U>{};
+			return Allocator<U, MemoryPool>{};
+		}
+	};
+
+	//提供用户自定义类使用内存池功能（继承此类）
+	template<typename MemoryPool>
+	class UseMemoryPool
+	{
+	public:
+		void* operator new(size_t size)
+		{
+			return MemoryPoolManage<MemoryPool>::allocate(size);
+		}
+
+		void operator delete(void* oldP, size_t size)
+		{
+			MemoryPoolManage<MemoryPool>::deallocate(oldP, size);
 		}
 	};
 }
+
 #endif //MEMORYPOOL_H
