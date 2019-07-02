@@ -16,7 +16,6 @@ namespace hzw
 
 	public:
 		MemoryPoolManage() = delete;
-		MemoryPoolManage(const MemoryPoolManage&) = delete;
 
 		//功能：分配内存资源
 		//输入：内存需求的大小
@@ -38,14 +37,11 @@ namespace hzw
 		class MemoryPoolProxy
 		{
 		public:
+			MemoryPoolProxy()noexcept : _memoryPool{ ini_pool() } {}
+
 			MemoryPoolProxy(const MemoryPoolProxy&) = delete;
 
-			MemoryPoolProxy() : _memoryPool{ini_pool()}
-			{
-				
-			}
-
-			~MemoryPoolProxy()
+			~MemoryPoolProxy()noexcept
 			{
 				std::lock_guard<std::mutex> locker{ _poolsMutex };
 				_pools.push(std::move(_memoryPool));
@@ -64,7 +60,7 @@ namespace hzw
 			}
 
 		private:
-			MemoryPool ini_pool()
+			static MemoryPool ini_pool()
 			{
 				std::lock_guard<std::mutex> locker{ _poolsMutex };
 				if (_pools.empty()) return MemoryPool{};
@@ -90,7 +86,8 @@ namespace hzw
 	template<typename MemoryPool>
 	std::mutex MemoryPoolManage<MemoryPool>::_poolsMutex;
 	template<typename MemoryPool>
-	thread_local typename MemoryPoolManage<MemoryPool>::MemoryPoolProxy MemoryPoolManage<MemoryPool>::_memoryPoolProxy;
+	thread_local typename MemoryPoolManage<MemoryPool>::MemoryPoolProxy 
+		MemoryPoolManage<MemoryPool>::_memoryPoolProxy;
 
 	//分配器：提供容器使用内存池功能
 	template<typename T, typename MemoryPool>
@@ -133,8 +130,12 @@ namespace hzw
 			return Allocator<U, MemoryPool>{};
 		}
 	};
+	template<typename T>//悟空分配器别名
+	using AllocWk = Allocator<T, WukongMemoryPool<false>>;
+	template<typename T>//洛基分配器别名
+	using AllocLk = Allocator<T, LokiMemoryPool<false>>;
 
-	//提供用户自定义类使用内存池功能（继承此类）
+	//提供用户自定义类使用内存池功能（公有继承此类）
 	template<typename MemoryPool>
 	class UseMemoryPool
 	{
@@ -149,6 +150,10 @@ namespace hzw
 			MemoryPoolManage<MemoryPool>::deallocate(oldP, size);
 		}
 	};
+	using UseWk = UseMemoryPool<WukongMemoryPool<false>>;//悟空（不支持多态）
+	using UseLk = UseMemoryPool<LokiMemoryPool<false>>;//洛基（不支持多态）
+	using UseWkP = UseMemoryPool<WukongMemoryPool<true>>;//悟空（支持多态）
+	using UseLkP = UseMemoryPool<LokiMemoryPool<true>>;//洛基（支持多态）
 }
 
 #endif //MEMORYPOOL_H

@@ -24,16 +24,16 @@ struct D
 	char buf[96];
 };
 
-template<typename MemoryPool>
-void allocate_test(int testCount, int dataSize)
+template<template<typename T> typename Alloc>
+void allocate_test(int testCount, int containSize)
 {	
 	for (int i{ 0 }; i < testCount; ++i)
 	{		
-		std::list<A, Allocator<A, MemoryPool>> la;
-		std::list<B, Allocator<B, MemoryPool>> lb;
-		std::list<C, Allocator<C, MemoryPool>> lc;
-		std::list<D, Allocator<D, MemoryPool>> ld;
-		for (int j = 0; j < dataSize; ++j)
+		std::list<A, Alloc<A>> la;
+		std::list<B, Alloc<B>> lb;
+		std::list<C, Alloc<C>> lc;
+		std::list<D, Alloc<D>> ld;
+		for (int j = 0; j < containSize; ++j)
 		{
 			la.push_back(A{});
 			lb.push_back(B{});
@@ -43,52 +43,40 @@ void allocate_test(int testCount, int dataSize)
 	}
 }
 
-void allocate_test(int testCount, int dataSize)
-{
-	for (int i{ 0 }; i < testCount; ++i)
-	{
-		std::list<A> la;
-		std::list<B> lb;
-		std::list<C> lc;
-		std::list<D> ld;
-		for (int j = 0; j < dataSize; ++j)
-		{
-			la.push_back(A{});
-			lb.push_back(B{});
-			lc.push_back(C{});
-			ld.push_back(D{});
-		}
-	}
-}
+#define CONTAIN_SIZE 5'000'000
+#define TEST_COUNT 10
 
-#define TEST_SIZE 5000000
-#define TEST_NUM 10
-
-int main(int argc, char* argv[])
+void test()
 {
-	steady_clock::time_point t{ steady_clock::now() };
 #if(1)//Îò¿Õ²âÊÔ
-	std::thread t1{ allocate_test<WukongMemoryPool>, TEST_NUM, TEST_SIZE };
-	std::thread t2{ allocate_test<WukongMemoryPool>, TEST_NUM, TEST_SIZE };
-	std::thread t3{ allocate_test<WukongMemoryPool>, TEST_NUM, TEST_SIZE };
-	std::thread t4{ allocate_test<WukongMemoryPool>, TEST_NUM, TEST_SIZE };
+	std::thread t1{ allocate_test<AllocWk>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t2{ allocate_test<AllocWk>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t3{ allocate_test<AllocWk>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t4{ allocate_test<AllocWk>, TEST_COUNT, CONTAIN_SIZE };
 #endif
 #if(0)//Âå»ù²âÊÔ                                                                                          
-	std::thread t1{ allocate_test<LokiMemoryPool>, TEST_NUM, TEST_SIZE };
-	std::thread t2{ allocate_test<LokiMemoryPool>, TEST_NUM, TEST_SIZE };
-	std::thread t3{ allocate_test<LokiMemoryPool>, TEST_NUM, TEST_SIZE };
-	std::thread t4{ allocate_test<LokiMemoryPool>, TEST_NUM, TEST_SIZE };
+	std::thread t1{ allocate_test<AllocLk>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t2{ allocate_test<AllocLk>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t3{ allocate_test<AllocLk>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t4{ allocate_test<AllocLk>, TEST_COUNT, CONTAIN_SIZE };
 #endif
 #if(0)//Ô­Éú¶Ô±È²âÊÔ
-	std::thread t1{ allocate_test, TEST_NUM, TEST_SIZE };
-	std::thread t2{ allocate_test, TEST_NUM, TEST_SIZE };
-	std::thread t3{ allocate_test, TEST_NUM, TEST_SIZE };
-	std::thread t4{ allocate_test, TEST_NUM, TEST_SIZE };
+	std::thread t1{ allocate_test<std::allocator>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t2{ allocate_test<std::allocator>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t3{ allocate_test<std::allocator>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t4{ allocate_test<std::allocator>, TEST_COUNT, CONTAIN_SIZE };
 #endif
 	t1.join();
 	t2.join();
 	t3.join();
 	t4.join();
+}
+
+int main(int argc, char* argv[])
+{
+	steady_clock::time_point t{ steady_clock::now() };
+
+	test();
 
 	std::cout << duration_cast<duration<double>>(steady_clock::now() - t).count();
 	return 0;

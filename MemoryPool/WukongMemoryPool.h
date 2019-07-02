@@ -1,8 +1,8 @@
 #ifndef  WUKONGMEMORYPOOL_H
 #define WUKONGMEMORYPOOL_H
 
-#include <exception>
 #include <vector>
+#include <type_traits>
 
 /*
 	悟空内存池
@@ -14,21 +14,13 @@
 namespace hzw
 {
 	//悟空内存池
+	template<bool SupportPolym>
 	class WukongMemoryPool
 	{
-	public:
 		struct Node;
-		enum
-		{
-			CHAIN_LENTH = 32, PER_CHAIN_SIZE = 4, MAX_SPLIT_SIZE = 20,
-			MAX_SIZE = CHAIN_LENTH * PER_CHAIN_SIZE
-		};
-		//内存池链的个数  //内存池粒度 //最大切割个数 //管理的最大内存 
 
-		WukongMemoryPool() :
-			_pool(CHAIN_LENTH, nullptr), _freeBegin{ nullptr }, _freeEnd{ nullptr }, _count{ 0 }
-		{
-		}
+	public:
+		WukongMemoryPool() : _pool(CHAIN_LENTH, { 0, nullptr }) {}
 
 		WukongMemoryPool(const WukongMemoryPool&) = delete;
 
@@ -39,73 +31,76 @@ namespace hzw
 			size_t alSize{ align_size(size) };
 			size_t index{ search_index(alSize) };
 			//对应内存链为空则填充
-			if (!_pool[index]) fill_chain(alSize);
-			return remove_from_chain(_pool[index]);
+			if (!_pool[index].second) fill_chain(_pool[index], alSize);
+			return _allocate(_pool[index], alSize, std::bool_constant<SupportPolym>{});
 		}
 
 		void deallocate(void* oldP, size_t size)
 		{
-			add_to_chain(static_cast<Node*>(oldP), align_size(size));
+			_deallocate(oldP, size, std::bool_constant<SupportPolym>{});
 		}
 
-	private:
-		//功能：切割战备池后调整战备池大小
-		//输入：对齐后内存需求大小
-		//输出：切割完成后的内存链
-		Node* split_free_pool(size_t size)
+	public:
+		enum
 		{
-			Node* result{ reinterpret_cast<Node*>(_freeBegin) };
-			size_t splitSize{ (_freeEnd - _freeBegin) / size };
+			CHAIN_LENTH = 32, PER_CHAIN_SIZE = 4, MAX_SPLIT_SIZE = 128,
+			MAX_SIZE = CHAIN_LENTH * PER_CHAIN_SIZE
+		};
+		//内存池链的个数  //内存池粒度 //最大切割个数 //管理的最大内存 
+
+	private:
+		//功能：allocate辅助函数（支持多态）
+		void* _allocate(std::pair<size_t, Node*>& chainHead, size_t size, std::true_type)
+		{
+			unsigned char* cookie{ static_cast<unsigned char*>(remove_from_chain(chainHead)) };
+			*cookie = static_cast<unsigned char>(size);
+			return cookie + 1;
+		}
+
+		//功能：allocate辅助函数（不支持多态）
+		void* _allocate(std::pair<size_t, Node*>& chainHead, size_t, std::false_type)
+		{
+			return remove_from_chain(chainHead);
+		}
+
+		//功能：_deallocate辅助函数（支持多态）
+		void _deallocate(void* oldp, size_t, std::true_type)
+		{
+			unsigned char* cookie{ static_cast<unsigned char*>(oldp) - 1 };
+			add_to_chain(reinterpret_cast<Node*>(cookie), _pool[search_index(*cookie)]);
+		}
+
+		//功能：_deallocate辅助函数（不支持多态）
+		void _deallocate(void* oldp, size_t size, std::false_type)
+		{
+			size_t index{ search_index(align_size(size)) };
+			add_to_chain(static_cast<Node*>(oldp), _pool[index]);
+		}
+
+		//功能：填充内存链
+		//输入：内存链头、对齐后内存需求大小
+		void fill_chain(std::pair<size_t, Node*>& chainHead, size_t size)
+		{
+			//动态决定切割个数
+			size_t splitSize{ 20 + (chainHead.first >> 5) };
 			splitSize = splitSize < MAX_SPLIT_SIZE ? splitSize : MAX_SPLIT_SIZE;
-			//切割
-			char* p{ _freeBegin };
+			//申请切割的内存
+			char* chunk{ static_cast<char*>(::operator new(splitSize * size)) };
+			//切割chunk
+			char* p{ chunk };
 			for (size_t i{ 1 }; i < splitSize; ++i, p += size)
 				reinterpret_cast<Node*>(p)->next = reinterpret_cast<Node*>(p + size);
 			reinterpret_cast<Node*>(p)->next = nullptr;
-			//重置战备池
-			_freeBegin = p + size;
-			return result;
-		}
-
-		//功能：填充内存链（填充内存来源：战备池，malloc，更大的内存链）
-		//输入：对齐后内存需求大小
-		void fill_chain(size_t size)
-		{
-			size_t lastSize{ static_cast<size_t>(_freeEnd - _freeBegin) };
-			//生成新链
-			if (lastSize < size)//战备池无法满足一个需求
-			{
-				if (lastSize) add_to_chain(reinterpret_cast<Node*>(_freeBegin), lastSize);//处理战备池剩余
-				//填充战备池
-				size_t askSize{ size * MAX_SPLIT_SIZE * 2 + align_size(_count >> 2) };//增长量		
-				//这里可以减少askSize直到向系统索求成功，但是涸泽而渔明智吗？通常情况不明智，所有下方没那么做
-				if (_freeBegin = reinterpret_cast<char*>(std::malloc(askSize)))//向系统申请内存成功
-				{
-					_freeEnd = _freeBegin + askSize;
-					_count += askSize;
-				}
-				else//向系统失败，分割更大的内存链
-				{
-					size_t targetIndex{ search_index(size) + 1 };
-					for (; targetIndex < CHAIN_LENTH; ++targetIndex)
-						if (_pool[targetIndex])	break;
-					if (targetIndex >= CHAIN_LENTH)  throw std::bad_alloc{};//找不到可分割的大内存链
-					else
-					{
-						_freeBegin = reinterpret_cast<char*>(remove_from_chain(_pool[targetIndex]));
-						_freeEnd = _freeBegin + (targetIndex + 1) * PER_CHAIN_SIZE;
-					}
-				}
-			}
-			_pool[search_index(size)] = split_free_pool(size);//切割战备池，挂到对应内存链
+			//挂到对应内存链
+			chainHead.second = reinterpret_cast<Node*>(chunk);
 		}
 
 		//功能：查找内存需求对应的内存链索引
-		//输入：内存需求大小（执行align_size后）
+		//输入：对齐后内存需求大小
 		//输出：内存链索引
 		static size_t search_index(size_t size)
 		{
-			return (size >> 2) - 1;
+			return (size - SupportPolym >> 2) - 1;
 		}
 
 		//功能：内存需求与PER_CHAIN_SIZE对齐
@@ -120,31 +115,32 @@ namespace hzw
 		//功能：align_size辅助函数（64位）
 		static size_t _align_size(std::true_type, size_t size)
 		{
-			return size <= 8 ? 8 : (size + PER_CHAIN_SIZE - 1 & ~(PER_CHAIN_SIZE - 1));
+			return (size <= 8 ? 8 : (size + PER_CHAIN_SIZE - 1 & ~(PER_CHAIN_SIZE - 1))) + SupportPolym;
 		}
 
 		//功能：align_size辅助函数（32位）
 		static size_t _align_size(std::false_type, size_t size)
 		{
-			return size + PER_CHAIN_SIZE - 1 & ~(PER_CHAIN_SIZE - 1);
+			return (size + PER_CHAIN_SIZE - 1 & ~(PER_CHAIN_SIZE - 1)) + SupportPolym;
 		}
 
-		//功能：向对应内存链添加新块
-		//输入：新块指针，内存需求大小
-		void add_to_chain(Node* p, size_t size)
+		//功能：添加内存块到内存链
+		//输入：添加的内存块、内存链头
+		void add_to_chain(Node* p, std::pair<size_t, Node*>& chainHead)
 		{
-			Node*& chainHead{ _pool[search_index(size)] };
-			p->next = chainHead;
-			chainHead = p;
+			--chainHead.first;
+			p->next = chainHead.second;
+			chainHead.second = p;
 		}
 
-		//功能：移除对应内存链头部的块
-		//输入：对应内存链指针引用
-		//输出：移除的块指针
-		void* remove_from_chain(Node*& chainHead)
+		//功能：从内存链移除内存块
+		//输入：内存链头
+		//输出：内存块
+		void* remove_from_chain(std::pair<size_t, Node*>& chainHead)
 		{
-			void* result{ chainHead };
-			chainHead = chainHead->next;
+			++chainHead.first;
+			void* result{ chainHead.second };
+			chainHead.second = chainHead.second->next;
 			return result;
 		}
 
@@ -153,9 +149,7 @@ namespace hzw
 		{
 			Node* next;
 		};
-		std::vector<Node*> _pool;//内存池
-		char* _freeBegin, * _freeEnd;//战备池指针
-		size_t _count;//内存池管理内存总量
+		std::vector<std::pair<size_t, Node*>> _pool;//内存池
 	};
 }
 

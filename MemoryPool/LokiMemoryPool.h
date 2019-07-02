@@ -28,8 +28,7 @@ namespace hzw
 			for (; i < blockSize; ++i, p += size) *p = i;
 		}
 
-		//功能：无作为，纯粹为了支持vector，只使用移动构造
-		_Chunk(const _Chunk&)noexcept {}
+		_Chunk(const _Chunk&) = delete;
 
 		_Chunk(_Chunk&& rh)noexcept :
 			_buf{ rh._buf }, _index{ rh._index }, _count{ rh._count }, _blockSize{ rh._blockSize }
@@ -37,7 +36,7 @@ namespace hzw
 			rh._buf = nullptr;
 		}
 
-		~_Chunk()
+		~_Chunk()noexcept
 		{
 			delete[] _buf;
 		}
@@ -100,6 +99,10 @@ namespace hzw
 	public:
 		_ChunkChain()noexcept :
 			_chunks{}, _allocateIt{}, _deallocateIt{}, _allocateState{ true }{}
+
+		_ChunkChain(const _ChunkChain&) = delete;
+
+		_ChunkChain(_ChunkChain&&) = default;
 
 		void* allocate(size_t size)
 		{
@@ -236,24 +239,25 @@ namespace hzw
 	};
 
 	//洛基内存池
+	template<bool SupportPolym>
 	class LokiMemoryPool
 	{
 	public:
 		LokiMemoryPool() : _bpool(CHAIN_SIZE), _spool(3){}
 
 		LokiMemoryPool(const LokiMemoryPool&) = delete;
+
 		LokiMemoryPool(LokiMemoryPool&&) = default;
 
 		void* allocate(size_t size)
 		{
 			size_t alSize{ align_size(size) };
-			return search_chain(alSize).allocate(alSize);
+			return _allocate(alSize, std::bool_constant<SupportPolym>{});
 		}
 
 		void deallocate(void* p, size_t size)
 		{
-			size_t alSize{ align_size(size) };
-			return search_chain(alSize).deallocate(p, alSize);
+			_deallocate(p, size, std::bool_constant<SupportPolym>{});
 		}
 
 	public:
@@ -261,17 +265,45 @@ namespace hzw
 		//内存池链的个数  //内存池粒度 //管理的最大内存 
 
 	private:
+		//功能：allocate辅助函数（支持多态）
+		void* _allocate(size_t size, std::true_type)
+		{
+			unsigned char* cookie{ static_cast<unsigned char*>(search_chain(size).allocate(size)) };
+			*cookie = static_cast<unsigned char>(size);
+			return cookie + 1;
+		}
+
+		//功能：allocate辅助函数（不支持多态）
+		void* _allocate(size_t size, std::false_type)
+		{
+			return search_chain(size).allocate(size);
+		}
+
+		//功能：deallocate辅助函数（支持多态）
+		void _deallocate(void* p, size_t, std::true_type)
+		{
+			unsigned char* cookie{ static_cast<unsigned char*>(p) - 1 };
+			search_chain(*cookie).deallocate(cookie, *cookie);
+		}
+
+		//功能：deallocate辅助函数（不支持多态）
+		void _deallocate(void* p, size_t size, std::false_type)
+		{
+			size_t alSize{ align_size(size) };
+			search_chain(alSize).deallocate(p, alSize);
+		}
+
 		//功能：查找对应chunks
 		//输入：align_size后的大小
 		_ChunkChain& search_chain(size_t size)
 		{
-			return size < 4 ? _spool[size - 1] : _bpool[(size >> 2) - 1];
+			return size < 4 + SupportPolym ? _spool[size - 1 - SupportPolym] : _bpool[(size - SupportPolym >> 2) - 1];
 		}
 
 		//功能：内存需求与PER_CHAIN_SIZE对齐
-		size_t align_size(size_t size)
+		static size_t align_size(size_t size)
 		{
-			return size < 4 ? size : (size + PER_CHAIN_SIZE - 1 & ~(PER_CHAIN_SIZE - 1));
+			return (size < 4 ? size : (size + PER_CHAIN_SIZE - 1 & ~(PER_CHAIN_SIZE - 1))) + SupportPolym;
 		}
 
 	private:
