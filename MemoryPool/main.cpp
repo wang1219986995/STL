@@ -48,17 +48,23 @@ void allocate_test(int testCount, int containSize)
 
 void test()
 {
-#if(1)//ŒÚø’≤‚ ‘
-	std::thread t1{ allocate_test<AllocWk>, TEST_COUNT, CONTAIN_SIZE };
-	std::thread t2{ allocate_test<AllocWk>, TEST_COUNT, CONTAIN_SIZE };
-	std::thread t3{ allocate_test<AllocWk>, TEST_COUNT, CONTAIN_SIZE };
-	std::thread t4{ allocate_test<AllocWk>, TEST_COUNT, CONTAIN_SIZE };
+#if(0)//ŒÚø’≤‚ ‘
+	std::thread t1{ allocate_test<AllocWkT>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t2{ allocate_test<AllocWkT>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t3{ allocate_test<AllocWkT>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t4{ allocate_test<AllocWkT>, TEST_COUNT, CONTAIN_SIZE };
 #endif
-#if(0)//¬Âª˘≤‚ ‘                                                                                          
-	std::thread t1{ allocate_test<AllocLk>, TEST_COUNT, CONTAIN_SIZE };
-	std::thread t2{ allocate_test<AllocLk>, TEST_COUNT, CONTAIN_SIZE };
-	std::thread t3{ allocate_test<AllocLk>, TEST_COUNT, CONTAIN_SIZE };
-	std::thread t4{ allocate_test<AllocLk>, TEST_COUNT, CONTAIN_SIZE };
+#if(0)//¬Âª˘≤‚ ‘                               
+	std::thread t1{ allocate_test<AllocLkT>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t2{ allocate_test<AllocLkT>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t3{ allocate_test<AllocLkT>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t4{ allocate_test<AllocLkT>, TEST_COUNT, CONTAIN_SIZE };
+#endif
+#if(1)//≈ÆÊ¥≤‚ ‘                                                                                          
+	std::thread t1{ allocate_test<AllocNwT>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t2{ allocate_test<AllocNwT>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t3{ allocate_test<AllocNwT>, TEST_COUNT, CONTAIN_SIZE };
+	std::thread t4{ allocate_test<AllocNwT>, TEST_COUNT, CONTAIN_SIZE };
 #endif
 #if(0)//‘≠…˙∂‘±»≤‚ ‘
 	std::thread t1{ allocate_test<std::allocator>, TEST_COUNT, CONTAIN_SIZE };
@@ -66,10 +72,12 @@ void test()
 	std::thread t3{ allocate_test<std::allocator>, TEST_COUNT, CONTAIN_SIZE };
 	std::thread t4{ allocate_test<std::allocator>, TEST_COUNT, CONTAIN_SIZE };
 #endif
+#if(1)
 	t1.join();
 	t2.join();
 	t3.join();
 	t4.join();
+#endif
 }
 
 int main(int argc, char* argv[])

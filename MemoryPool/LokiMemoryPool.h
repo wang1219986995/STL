@@ -1,8 +1,7 @@
 #ifndef LOKIMEMORYPOOL_H
 #define LOKIMEMORYPOOL_H
 
-#include <vector>
-#include <cassert>
+#include "MemoryPoolManage.h"
 
 /*
 	洛基内存池
@@ -12,7 +11,8 @@
 
 namespace hzw
 {
-	//内存块
+	//内存块（Loki和Nvwa使用）
+	template<bool SupportCookie>
 	class _Chunk
 	{
 	public:
@@ -21,11 +21,11 @@ namespace hzw
 	public:
 		//输入：内存块大小、内存块个数
 		_Chunk(size_t size, unsigned char blockSize) :
-			_buf{ new unsigned char[size * blockSize] }, _index{ 0 }, _count{ blockSize }, _blockSize{ blockSize }
+			_buf{ static_cast<unsigned char*>(::operator new((size + SupportCookie) * blockSize)) }, _index{ 0 }, _count{ blockSize }, _blockSize{ blockSize }
 		{
 			unsigned char i{ 1 };
 			unsigned char* p{ _buf };
-			for (; i < blockSize; ++i, p += size) *p = i;
+			for (; i < blockSize; ++i, p += (size + SupportCookie))* p = i;
 		}
 
 		_Chunk(const _Chunk&) = delete;
@@ -36,24 +36,28 @@ namespace hzw
 			rh._buf = nullptr;
 		}
 
+		_Chunk& operator=(const _Chunk&) = delete;
+
+		_Chunk& operator=(_Chunk&&) = delete;
+
 		~_Chunk()noexcept
 		{
-			delete[] _buf;
+			::operator delete(_buf);
 		}
 
 		void* allocate(size_t size)
 		{
-			unsigned char* result{ _buf + size * _index };
-			_index = *result;
+			unsigned char* result{ _buf + (size + SupportCookie) * _index };
+			_allocate(result, bool_constant<SupportCookie>{});
 			--_count;
-			return result;
+			return result + SupportCookie;
 		}
 
 		void deallocate(void* p, size_t size)
 		{
-			unsigned char* cp{ static_cast<unsigned char*>(p) };
+			unsigned char* cp{ static_cast<unsigned char*>(p) - SupportCookie };
 			*cp = _index;
-			_index = (cp - _buf) / size;
+			_index = (cp - _buf) / (size + SupportCookie);
 			++_count;
 		}
 
@@ -79,11 +83,44 @@ namespace hzw
 		{
 			if (&rh != this)
 			{
-				std::swap(_buf, rh._buf);
-				std::swap(_index, rh._index);
-				std::swap(_count, rh._count);
-				std::swap(_blockSize, rh._blockSize);
+				using std::swap;
+				swap(_buf, rh._buf);
+				swap(_index, rh._index);
+				swap(_count, rh._count);
+				swap(_blockSize, rh._blockSize);
 			}
+		}
+
+		//功能：返回可用块计数
+		unsigned char unuse_count()
+		{
+			return _count;
+		}
+
+		//功能：返回内存块地址
+		unsigned char* buf_point()
+		{
+			return _buf;
+		}
+
+		//功能：读取cookie
+		static unsigned char* cookie(void* p, size_t size)
+		{
+			unsigned char* cookie{ static_cast<unsigned char*>(p) - 1 };
+			return cookie - (size + 1) * (*cookie);
+		}
+
+	private:
+		//功能：allocate辅助函数（支持cookie）
+		void _allocate(unsigned char* result, true_type)
+		{
+			::std::swap(_index, *result);
+		}
+
+		//功能：allocate辅助函数（不支持cookie）
+		void _allocate(unsigned char* result, false_type)
+		{
+			_index = *result;
 		}
 
 	private:
@@ -96,6 +133,8 @@ namespace hzw
 	//内存链
 	class _ChunkChain
 	{
+		using Chunk = _Chunk<false>;
+
 	public:
 		_ChunkChain()noexcept :
 			_chunks{}, _allocateIt{}, _deallocateIt{}, _allocateState{ true }{}
@@ -103,6 +142,10 @@ namespace hzw
 		_ChunkChain(const _ChunkChain&) = delete;
 
 		_ChunkChain(_ChunkChain&&) = default;
+
+		_ChunkChain& operator=(const _ChunkChain&) = delete;
+
+		_ChunkChain& operator=(_ChunkChain&&) = delete;
 
 		void* allocate(size_t size)
 		{
@@ -116,7 +159,7 @@ namespace hzw
 				利用局部性原理，适配位置极可能就在失配处附近
 				*/
 				auto toBegin{ _allocateIt };
-				auto toEnd{ std::next(_allocateIt) };
+				auto toEnd{ next(_allocateIt) };
 				bool atBegin{ false };
 				while (!atBegin || toEnd != _chunks.end())//没到头或没到尾继续查找
 				{
@@ -158,8 +201,8 @@ namespace hzw
 				_allocateState = true;
 			fill:
 				size_t blockSize{ 20 + (chunksSize >> 1) };//动态设定blockSize
-				_chunks.emplace_back(size, blockSize < _Chunk::MAX_BLOCK_SIZE ? blockSize : _Chunk::MAX_BLOCK_SIZE);
-				_allocateIt = std::prev(_chunks.end());
+				_chunks.emplace_back(size, blockSize < Chunk::MAX_BLOCK_SIZE ? blockSize : Chunk::MAX_BLOCK_SIZE);
+				_allocateIt = prev(_chunks.end());
 			}
 			_deallocateIt = _allocateIt;//1.下次内存回收位置可能就是当前分配位置 2.迭代器可能失效
 			return _allocateIt->allocate(size);
@@ -216,7 +259,7 @@ namespace hzw
 			{
 				if (_chunks.back().is_empty())//有两个全空chunk，释放旧的一个
 				{
-					_chunks.pop_back();
+					if (_deallocateIt != prev(_chunks.end(), 1)) _chunks.pop_back();
 					if (_chunks.size() < (_chunks.capacity() >> 1))
 					{
 						ChunksIterator::difference_type allocateItIndex{ _allocateIt - _chunks.begin() };
@@ -227,13 +270,13 @@ namespace hzw
 						_deallocateIt = _chunks.begin() + deallocateItIndex;
 					}
 				}
-				if (!_chunks.empty()) _chunks.back().swap(*_deallocateIt);
+				_chunks.back().swap(*_deallocateIt);
 			}
 		}
 
 	private:
-		using ChunksIterator = std::vector<_Chunk>::iterator;
-		std::vector<_Chunk> _chunks;//内存链
+		using ChunksIterator = vector<Chunk>::iterator;
+		vector<Chunk> _chunks;//内存链
 		ChunksIterator _allocateIt, _deallocateIt;//上一次分配、回收的位置
 		bool _allocateState;//连续分配状态
 	};
@@ -243,54 +286,62 @@ namespace hzw
 	class LokiMemoryPool
 	{
 	public:
-		LokiMemoryPool() : _bpool(CHAIN_SIZE), _spool(3){}
+		LokiMemoryPool() : _bpool(CHAIN_SIZE), _spool(3) {}
 
 		LokiMemoryPool(const LokiMemoryPool&) = delete;
 
 		LokiMemoryPool(LokiMemoryPool&&) = default;
 
+		LokiMemoryPool& operator=(const LokiMemoryPool&) = delete;
+
+		LokiMemoryPool& operator=(LokiMemoryPool&&) = default;
+
+		~LokiMemoryPool() = default;
+
 		void* allocate(size_t size)
 		{
-			size_t alSize{ align_size(size) };
-			return _allocate(alSize, std::bool_constant<SupportPolym>{});
+			return _allocate(align_size(size), bool_constant<SupportPolym>{});
 		}
 
 		void deallocate(void* p, size_t size)
 		{
-			_deallocate(p, size, std::bool_constant<SupportPolym>{});
+			_deallocate(p, size, bool_constant<SupportPolym>{});
 		}
 
-	public:
+	private:
 		enum { CHAIN_SIZE = 32, PER_CHAIN_SIZE = 4, MAX_SIZE = CHAIN_SIZE * PER_CHAIN_SIZE };
 		//内存池链的个数  //内存池粒度 //管理的最大内存 
 
-	private:
 		//功能：allocate辅助函数（支持多态）
-		void* _allocate(size_t size, std::true_type)
+		void* _allocate(size_t size, true_type)
 		{
-			unsigned char* cookie{ static_cast<unsigned char*>(search_chain(size).allocate(size)) };
+			unsigned char* cookie{ static_cast<unsigned char*>(size > MAX_SIZE ? 
+				::operator new(size) : search_chain(size).allocate(size)) };
 			*cookie = static_cast<unsigned char>(size);
 			return cookie + 1;
 		}
 
 		//功能：allocate辅助函数（不支持多态）
-		void* _allocate(size_t size, std::false_type)
+		void* _allocate(size_t size, false_type)
 		{
-			return search_chain(size).allocate(size);
+			return size > MAX_SIZE ? ::operator new(size) : search_chain(size).allocate(size);
 		}
 
 		//功能：deallocate辅助函数（支持多态）
-		void _deallocate(void* p, size_t, std::true_type)
+		void _deallocate(void* p, size_t, true_type)
 		{
 			unsigned char* cookie{ static_cast<unsigned char*>(p) - 1 };
-			search_chain(*cookie).deallocate(cookie, *cookie);
+			unsigned char cookieValue{ *cookie };
+			cookieValue > MAX_SIZE ? ::operator delete(cookie) :
+				search_chain(cookieValue).deallocate(cookie, cookieValue);
 		}
 
 		//功能：deallocate辅助函数（不支持多态）
-		void _deallocate(void* p, size_t size, std::false_type)
+		void _deallocate(void* p, size_t size, false_type)
 		{
-			size_t alSize{ align_size(size) };
-			search_chain(alSize).deallocate(p, alSize);
+			size = align_size(size);
+			size > MAX_SIZE ? ::operator delete(p) :
+				search_chain(size).deallocate(p, size);
 		}
 
 		//功能：查找对应chunks
@@ -307,9 +358,28 @@ namespace hzw
 		}
 
 	private:
-		std::vector<_ChunkChain> _bpool;//负责4-128byte
-		std::vector<_ChunkChain> _spool;//负责1、2、3byte
+		vector<_ChunkChain> _bpool;//负责4-128byte
+		vector<_ChunkChain> _spool;//负责1、2、3byte
 	};
+
+	template<bool SupportPolym>
+	using Lk = LokiMemoryPool<SupportPolym>;//洛基内存池别名
+
+	using LkG = GMM<Lk<false>>;//洛基（不支持多态、全局归属）
+	using LkT = TMM<Lk<false>>;//洛基（不支持多态、线程归属）
+	using LkGP = GMM<Lk<true>>;//洛基（支持多态、全局归属）
+	using LkTP = TMM<Lk<true>>;//洛基（支持多态、线程归属）
+
+	//洛基分配器别名
+	template<typename T>
+	using AllocLkG = Allocator<T, LkG>;
+	template<typename T>
+	using AllocLkT = Allocator<T, LkT>;
+	
+	using UseLkG = UseMemoryPool<LkG>;
+	using UseLkT = UseMemoryPool<LkT>;
+	using UseLkGP = UseMemoryPool<LkGP>;
+	using UseLkTP = UseMemoryPool<LkTP>;
 }
 
 #endif // !LOKIMEMORYPOOL_H

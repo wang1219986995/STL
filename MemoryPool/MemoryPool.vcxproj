@@ -132,6 +132,8 @@
   <ItemGroup>
     <ClInclude Include="LokiMemoryPool.h" />
     <ClInclude Include="MemoryPool.h" />
+    <ClInclude Include="MemoryPoolManage.h" />
+    <ClInclude Include="NvwaMemoryPool.h" />
     <ClInclude Include="WukongMemoryPool.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

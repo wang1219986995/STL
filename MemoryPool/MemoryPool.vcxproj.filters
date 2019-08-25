@@ -29,5 +29,11 @@
     <ClInclude Include="LokiMemoryPool.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="NvwaMemoryPool.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryPoolManage.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
