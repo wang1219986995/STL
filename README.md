@@ -79,17 +79,17 @@ c++线程安全内存池，与c++容器和自定义类轻松搭配使用。适�
     public:
 	    virtual void work()
 	    {
-		    std::cout << "human work\n";
+		std::cout << "human work\n";
 	    }
-            virtual ~Human(){}
+        virtual ~Human(){}
     };
     class Teacher : public Human
     {
 	    int _id;
     public:
-	    virtual void work()
+	    void work() override
 	    {
-		    std::cout << "teacher work\n";
+		std::cout << "teacher work\n";
 	    }
     };
 
@@ -107,46 +107,43 @@ c++线程安全内存池，与c++容器和自定义类轻松搭配使用。适�
 
 #### 使用说明
 
-以下均已悟空内存池为例，其他内存池替换对应名称缩写即可
+    以下均已悟空内存池为例，其他内存池替换对应名称缩写即可
+
+    下方__代表内存池归属和多态特性，根据实际情况选择
 
 1. 头文件
-    （1）要使用某一种内存池直接include那个内存池头文件，如使用悟空内存池，#include "WukongMemoryPool.h"
+     ![include](https://images.gitee.com/uploads/images/2019/0901/205631_ef533671_5038916.png "include.png")
+    （1）要使用某一种内存池直接include对应内存池头文件，如使用悟空内存池，#include "WukongMemoryPool.h"
+
     （2）如果使用全部内存池也可直接#include "MemoryPool.h"
 
-2. 自定义对象使用内存池    
-    （1）不具有多态的自定义对象（公有继承UseWkG、UseWkT）
+2. 自定义对象使用内存池 （公有继承UseWk__）   
+    ![自定义相关类名](https://images.gitee.com/uploads/images/2019/0901/210557_6cba3d28_5038916.png "自定义相关类名.png")
     ```
     #include "WukongMemoryPool.h"
     using namespace hzw;
-    class A : public UseWk {...};//使用悟空内存池
-    class B : public UseLk {...};//使用洛基内存池
-    A* a{new A};//从内存池分配内存
-    delete a;//将内存块归还内存池
+    class A : public UseWk__ {...};//使用悟空内存池
+    A* a{new A};//从悟空内存池分配内存
+    delete a;//将内存块归还悟空内存池
     ```
-    （2）具有多态的自定义对象（公有继承UseWkP、UseLkP）
+
+3. 容器使用内存池
+    ![分配器相关类名](https://images.gitee.com/uploads/images/2019/0901/211123_05ce2596_5038916.png "分配器相关类名.png")
     ```
-    #include "MemoryPool.h"
+    #include "WukongMemoryPool.h"
     using namespace hzw;
-    class A : public UseWkP {...};//使用悟空内存池(支持基类指针delete)
-    class B : public UseLkP {...};//使用洛基内存池(支持基类指针delete)
-    A* a{new A};//从内存池分配内存
-    delete a;//将内存块归还内存池
+    std::list<int, AllocWk_<int>> list;//使用悟空内存池
     ```
-2. 容器使用内存池(AllocWk<T>、AllocLk<T>)
+
+4. 直接使用内存池
+    ![相关类名](https://images.gitee.com/uploads/images/2019/0901/212126_81f11e0f_5038916.png "相关类名.png")
     ```
-    #include "MemoryPool.h"
-    using namespace hzw;
-    std::list<int, AllocWk<int>> list1;//使用悟空内存池
-    std::list<int, AllocLk<int>> list2;//使用洛基内存池
+    int main(int argc, char* argv[])
+    {
+	size_t bufSize{ 100 };
+	char* buf{ static_cast<char*>(WkG::allocate(bufSize)) };//从悟空内存池获取内存
+	WkG::deallocate(buf, bufSize);//归还内存块
+    //注意调用allocate和deallocate类型名相同
+	return 0;
+    }
     ```
-3.  **注意事项** 
-
-    UseWkP和UseLkP 比 UseWk和UseLk 虽然支持多态自定义对象，但要付出时间和空间
-
-    使用基类指针执行delete，一定要使用UseWkP或 UseLkP（带P(polymorphic)尾缀的）
-
-    总结：
-
-    如果使用不带尾缀p：请确保用与数据类型匹配的指针delete，如果指针与指向类型不匹配（悟空内存泄漏、洛基直接异常）
-
-    如果使用带尾缀p：支持多态的自定义类型，但需要额外开销
