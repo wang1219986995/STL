@@ -1,0 +1,8 @@
+
+----[WkG]  MEMORY_LEAK----
+--------SIZE:20  DEBUG_INFO:[内存泄漏]
+--------SIZE:20  DEBUG_INFO:[debug_module中循环 i=1 j=1 内存泄漏]
+--------SIZE:20  DEBUG_INFO:[FILE:C:\Users\hhww7\source\repos\MemoryPool\MemoryPool\main.cpp  LINE:252  ]
+----ALL_LEAK_SIZE:60  ALL_LEAK_COUNT:3----
+----SERVICE RANGE:1-128  HIT_RATE:100%----
+

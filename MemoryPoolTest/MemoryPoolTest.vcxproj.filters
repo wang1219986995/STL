@@ -15,31 +15,16 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="LokiMemoryPool.hpp">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="MemoryPool.hpp">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="MemoryPoolManage.hpp">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="NvwaMemoryPool.hpp">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="MemoryPoolUtility.hpp">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="WukongMemoryPool.hpp">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="PanguMemoryPool.hpp">
-      <Filter>头文件</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="MemoryPoolTest.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="pch.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

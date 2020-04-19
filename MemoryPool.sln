@@ -5,6 +5,8 @@ VisualStudioVersion = 16.0.28803.452
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MemoryPool", "MemoryPool\MemoryPool.vcxproj", "{88E12B2E-2EC0-4C3B-842F-158B7337DE64}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MemoryPoolTest", "MemoryPoolTest\MemoryPoolTest.vcxproj", "{FC1ECA83-E165-4DB0-80F0-382D553538F1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,14 @@ Global
 		{88E12B2E-2EC0-4C3B-842F-158B7337DE64}.Release|x64.Build.0 = Release|x64
 		{88E12B2E-2EC0-4C3B-842F-158B7337DE64}.Release|x86.ActiveCfg = Release|Win32
 		{88E12B2E-2EC0-4C3B-842F-158B7337DE64}.Release|x86.Build.0 = Release|Win32
+		{FC1ECA83-E165-4DB0-80F0-382D553538F1}.Debug|x64.ActiveCfg = Debug|x64
+		{FC1ECA83-E165-4DB0-80F0-382D553538F1}.Debug|x64.Build.0 = Debug|x64
+		{FC1ECA83-E165-4DB0-80F0-382D553538F1}.Debug|x86.ActiveCfg = Debug|Win32
+		{FC1ECA83-E165-4DB0-80F0-382D553538F1}.Debug|x86.Build.0 = Debug|Win32
+		{FC1ECA83-E165-4DB0-80F0-382D553538F1}.Release|x64.ActiveCfg = Release|x64
+		{FC1ECA83-E165-4DB0-80F0-382D553538F1}.Release|x64.Build.0 = Release|x64
+		{FC1ECA83-E165-4DB0-80F0-382D553538F1}.Release|x86.ActiveCfg = Release|Win32
+		{FC1ECA83-E165-4DB0-80F0-382D553538F1}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
